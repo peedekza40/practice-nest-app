@@ -5,23 +5,36 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { jwtConstants } from './constants';
+import { IS_ALLOW_ANNONYMOUS_KEY, jwtConstants } from './constants';
 import { Request } from 'express';
+import { Reflector } from '@nestjs/core';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService) {}
+  constructor(private jwtService: JwtService, private reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const token = this.extractTokenFromHeader(request);
+
+    const isAllowAnnonymous = this.reflector.getAllAndOverride<boolean>(IS_ALLOW_ANNONYMOUS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    
+    if (isAllowAnnonymous) {
+      return true;
+    }
+
     if (!token) {
       throw new UnauthorizedException();
     }
+    
     try {
       const payload = await this.jwtService.verifyAsync(token, {
         secret: jwtConstants.secret,
       });
+      
       // 💡 We're assigning the payload to the request object here
       // so that we can access it in our route handlers
       request['user'] = payload;
